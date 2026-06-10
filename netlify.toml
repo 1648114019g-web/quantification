@@ -1,0 +1,40 @@
+[build]
+  publish = "public"
+  command = "mkdir -p public/lib && cp lib/notificationService.js public/lib/notificationService.js"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+[functions]
+  directory = "netlify/functions"
+  included_files = ["daily-reviews/**"]
+
+[[redirects]]
+  from = "/api/quote"
+  to = "/.netlify/functions/quote"
+  status = 200
+
+[[redirects]]
+  from = "/api/sina-kline"
+  to = "/.netlify/functions/sina-kline"
+  status = 200
+
+[[redirects]]
+  from = "/api/sector-fund-flow/history"
+  to = "/.netlify/functions/sector-fund-flow-history"
+  status = 200
+
+[[redirects]]
+  from = "/api/sector-fund-flow/daily-history"
+  to = "/.netlify/functions/sector-fund-flow-daily-history"
+  status = 200
+
+[[redirects]]
+  from = "/api/sector-fund-flow"
+  to = "/.netlify/functions/sector-fund-flow"
+  status = 200
+
+[[redirects]]
+  from = "/api/daily-reviews"
+  to = "/.netlify/functions/daily-reviews"
+  status = 200
