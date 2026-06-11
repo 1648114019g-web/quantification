@@ -1,14 +1,53 @@
 import https from 'https';
-import {
-  normalizeContainment,
-  findFractals,
-  buildStrokes,
-  buildSegments,
-  buildCenters,
-  buildSignals
-} from '../public/chan.js';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import vm from 'node:vm';
+import { fileURLToPath } from 'node:url';
 
 const SYMBOL = process.argv[2] || 'sh000001';
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const ROOT_DIR = path.resolve(SCRIPT_DIR, '..');
+const CHAN_EXPORTS = [
+  'normalizeContainment',
+  'findFractals',
+  'buildStrokes',
+  'buildSegments',
+  'buildCenters',
+  'buildSignals'
+];
+
+async function loadChanToolkit() {
+  const filePath = path.join(ROOT_DIR, 'public', 'chan.js');
+  const source = await readFile(filePath, 'utf8');
+  const executableSource = source
+    .replace(/^import[^\n]+\n/, '')
+    .replace(/export\s*\{[\s\S]*?\};\s*$/m, '');
+  const context = {
+    console,
+    Intl,
+    Math,
+    Date,
+    Map,
+    Set,
+    Array,
+    Number,
+    String,
+    Object,
+    JSON,
+    INDEXES: { [SYMBOL]: SYMBOL },
+    fetchIndexHistory: async () => [],
+    globalThis: null
+  };
+  context.globalThis = context;
+  vm.createContext(context);
+  vm.runInContext(
+    `${executableSource}\nObject.assign(globalThis, { ${CHAN_EXPORTS.join(', ')} });`,
+    context,
+    { filename: filePath }
+  );
+
+  return Object.fromEntries(CHAN_EXPORTS.map((name) => [name, context[name]]));
+}
 
 function parseNumber(value) {
   const parsed = Number(value);
@@ -95,16 +134,16 @@ function createStrokePreview(rows, strokes) {
   };
 }
 
-function calculateAnalysis(rows) {
+function calculateAnalysis(rows, chan) {
   const cleanRows = rows.filter((r) =>
     Number.isFinite(r.open) && Number.isFinite(r.close) && Number.isFinite(r.high) && Number.isFinite(r.low)
   );
-  const bars = normalizeContainment(cleanRows);
-  const fractals = findFractals(bars);
-  const strokes = buildStrokes(fractals, cleanRows);
-  const segments = buildSegments(strokes);
-  const centers = buildCenters(strokes);
-  const signals = buildSignals(strokes, cleanRows, centers);
+  const bars = chan.normalizeContainment(cleanRows);
+  const fractals = chan.findFractals(bars);
+  const strokes = chan.buildStrokes(fractals, cleanRows);
+  const segments = chan.buildSegments(strokes);
+  const centers = chan.buildCenters(strokes);
+  const signals = chan.buildSignals(strokes, cleanRows, centers);
   const previewStroke = createStrokePreview(cleanRows, strokes);
   return { cleanRows, strokes, segments, centers, signals, previewStroke };
 }
@@ -128,8 +167,8 @@ function strengthRatio(strokes) {
   };
 }
 
-function analyzePeriod(periodLabel, rows) {
-  const data = calculateAnalysis(rows);
+function analyzePeriod(periodLabel, rows, chan) {
+  const data = calculateAnalysis(rows, chan);
   const { cleanRows, strokes, segments, centers, signals, previewStroke } = data;
   const latest = cleanRows[cleanRows.length - 1];
   const tradable = signals.filter((s) => s.type === 'buy' || s.type === 'sell');
@@ -155,11 +194,16 @@ function analyzePeriod(periodLabel, rows) {
 }
 
 async function main() {
+  const chan = await loadChanToolkit();
   const [m30rows, m5rows] = await Promise.all([
     fetchSinaKLine(SYMBOL, 30, 1600),
     fetchSinaKLine(SYMBOL, 5, 1600)
   ]);
-  console.log(JSON.stringify({ symbol: SYMBOL, m30: analyzePeriod('30分钟', m30rows), m5: analyzePeriod('5分钟', m5rows) }, null, 2));
+  console.log(JSON.stringify({
+    symbol: SYMBOL,
+    m30: analyzePeriod('30分钟', m30rows, chan),
+    m5: analyzePeriod('5分钟', m5rows, chan)
+  }, null, 2));
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
