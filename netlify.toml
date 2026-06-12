@@ -35,6 +35,21 @@
   status = 200
 
 [[redirects]]
+  from = "/api/stop-loss/positions"
+  to = "/.netlify/functions/stop-loss-positions"
+  status = 200
+
+[[redirects]]
+  from = "/api/stop-loss/check"
+  to = "/.netlify/functions/stop-loss-check"
+  status = 200
+
+[[redirects]]
+  from = "/api/stop-loss/sell"
+  to = "/.netlify/functions/stop-loss-sell"
+  status = 200
+
+[[redirects]]
   from = "/api/daily-reviews"
   to = "/.netlify/functions/daily-reviews"
   status = 200

@@ -12,6 +12,7 @@ const tabs = [
   { id: 'ma10-turn-fear', label: '拐头+恐贪', title: '十日线拐头 + 恐贪策略', module: './ma10-turn-fear.js' },
   { id: 'ma20-turn', label: '二十日线拐头', title: '二十日线拐头策略计算', module: './ma20-turn.js' },
   { id: 'ma-predict', label: '明日均线', title: '明日 5/10 日线预测', module: './ma-predict.js' },
+  { id: 'stop-loss', label: '止损监控', title: '止损价监控', module: './stop-loss.js' },
   { id: 'daily-reviews', label: '每日复盘', title: '每日复盘', module: './daily-reviews.js' }
 ];
 
@@ -520,6 +521,97 @@ const templates = {
       </div>
       <div id="error" class="error" hidden></div>
     </section>
+  `,
+
+  'stop-loss': `
+    <section class="hero stop-loss-hero">
+      <article class="panel hero-copy">
+        <div class="badge">Tencent 数据源 / 前端轮询 / WxPusher</div>
+        <h1>止损价监控</h1>
+        <p>记录持仓标的与止损线，页面打开时每 5 分钟批量检查一次实时价格；触发后汇总发送一条微信提醒，并自动停止重复通知。</p>
+        <div class="hero-signals" aria-label="止损监控规则">
+          <span>批量行情检查</span><span>触发后不重复</span><span>卖出后停监听</span>
+        </div>
+        <div class="stop-loss-actions">
+          <button id="stop-loss-add" class="stop-loss-primary" type="button">添加止损</button>
+          <button id="stop-loss-check" class="stop-loss-secondary" type="button">立即检查</button>
+        </div>
+      </article>
+      <aside class="panel summary">
+        <div class="summary-head">
+          <div>
+            <div class="eyebrow">Risk Guard</div>
+            <strong>止损监听状态</strong>
+          </div>
+          <div class="pulse-dot" aria-hidden="true"></div>
+        </div>
+        <div class="score">
+          <small>正在监听</small>
+          <strong id="stop-loss-active-count">--</strong>
+          <span id="stop-loss-status">加载中...</span>
+        </div>
+        <div class="score-track" aria-hidden="true"><span></span></div>
+        <div class="metrics">
+          <div class="metric"><div class="metric-label">触发止损</div><strong id="stop-loss-triggered-count">--</strong></div>
+          <div class="metric"><div class="metric-label">上次检查</div><strong id="stop-loss-last-check">--</strong></div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="panel section stop-loss-section">
+      <div class="section-header">
+        <div>
+          <h2>持仓止损列表</h2>
+          <div class="meta">仅 active 状态参与 5 分钟检查；triggered 和 sold 状态不会再次推送。</div>
+        </div>
+        <div class="meta" id="stop-loss-list-meta">--</div>
+      </div>
+      <div class="trade-table-wrap">
+        <table class="trade-table stop-loss-table">
+          <thead><tr><th>标的</th><th>买入价</th><th>止损价</th><th>最新价</th><th>状态</th><th>上次检查</th><th>操作</th></tr></thead>
+          <tbody id="stop-loss-list"></tbody>
+        </table>
+      </div>
+      <div id="stop-loss-empty" class="stop-loss-empty" hidden>暂无止损监控记录。</div>
+      <div id="error" class="error" hidden></div>
+    </section>
+
+    <div id="stop-loss-modal" class="stop-loss-modal" role="dialog" aria-modal="true" aria-labelledby="stop-loss-modal-title" hidden>
+      <div class="stop-loss-backdrop" data-stop-loss-close></div>
+      <article class="stop-loss-dialog">
+        <header class="stop-loss-dialog-head">
+          <div>
+            <div class="eyebrow">Stop Loss</div>
+            <h2 id="stop-loss-modal-title">添加止损监控</h2>
+            <div class="meta">填写腾讯行情代码，例如 sh600519、sz000001、sh510880。</div>
+          </div>
+          <button id="stop-loss-close" class="stop-loss-close" type="button" aria-label="关闭止损弹窗">×</button>
+        </header>
+        <form id="stop-loss-form" class="stop-loss-form" novalidate>
+          <label>
+            <span>标的代码</span>
+            <input id="stop-loss-symbol" name="symbol" type="text" autocomplete="off" placeholder="sh600519" required>
+          </label>
+          <label>
+            <span>标的名称</span>
+            <input id="stop-loss-name" name="name" type="text" autocomplete="off" placeholder="贵州茅台" required>
+          </label>
+          <label>
+            <span>买入价格</span>
+            <input id="stop-loss-buy-price" name="buyPrice" type="number" inputmode="decimal" min="0" step="0.001" placeholder="1680.00" required>
+          </label>
+          <label>
+            <span>止损价格</span>
+            <input id="stop-loss-stop-price" name="stopLossPrice" type="number" inputmode="decimal" min="0" step="0.001" placeholder="1580.00" required>
+          </label>
+          <div id="stop-loss-form-error" class="stop-loss-form-error" role="alert" hidden></div>
+          <div class="stop-loss-form-actions">
+            <button id="stop-loss-cancel" class="stop-loss-secondary" type="button">取消</button>
+            <button id="stop-loss-submit" class="stop-loss-primary" type="submit">添加</button>
+          </div>
+        </form>
+      </article>
+    </div>
   `,
 
   'daily-reviews': `

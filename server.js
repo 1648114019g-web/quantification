@@ -45,6 +45,12 @@ const {
   readSectorDailyFlowHistory,
   readSectorFlowHistory
 } = require('./lib/sectorFlowStore');
+const {
+  checkStopLossPositions,
+  createStopLossPosition,
+  listStopLossPositions,
+  markStopLossPositionSold
+} = require('./lib/stopLossStore');
 
 const PORT = process.env.PORT || 4009;
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -102,6 +108,36 @@ function sendJson(res, statusCode, payload) {
     'Cache-Control': 'no-store'
   });
   res.end(JSON.stringify(payload));
+}
+
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let raw = '';
+    req.setEncoding('utf8');
+    req.on('data', (chunk) => {
+      raw += chunk;
+      if (raw.length > 100000) {
+        const error = new Error('Request body is too large.');
+        error.statusCode = 413;
+        reject(error);
+        req.destroy();
+      }
+    });
+    req.on('end', () => {
+      if (!raw.trim()) {
+        resolve({});
+        return;
+      }
+      try {
+        resolve(JSON.parse(raw));
+      } catch {
+        const error = new Error('Invalid JSON body.');
+        error.statusCode = 400;
+        reject(error);
+      }
+    });
+    req.on('error', reject);
+  });
 }
 
 function parseNumber(value) {
@@ -635,6 +671,50 @@ const server = http.createServer((req, res) => {
     fetchSinaKLine(symbol, scale, datalen)
       .then((data) => sendJson(res, 200, data))
       .catch((error) => sendJson(res, 500, { error: error.message }));
+    return;
+  }
+
+  if (requestUrl.pathname === '/api/stop-loss/positions') {
+    if (req.method === 'GET') {
+      listStopLossPositions()
+        .then((payload) => sendJson(res, 200, payload))
+        .catch((error) => sendJson(res, error.statusCode || 500, { error: error.message, code: error.code || null }));
+      return;
+    }
+
+    if (req.method === 'POST') {
+      readJsonBody(req)
+        .then(createStopLossPosition)
+        .then((payload) => sendJson(res, 201, payload))
+        .catch((error) => sendJson(res, error.statusCode || 500, { error: error.message, code: error.code || null }));
+      return;
+    }
+
+    sendJson(res, 405, { error: 'Method not allowed' });
+    return;
+  }
+
+  if (requestUrl.pathname === '/api/stop-loss/check') {
+    if (req.method !== 'POST') {
+      sendJson(res, 405, { error: 'Method not allowed' });
+      return;
+    }
+
+    checkStopLossPositions()
+      .then((payload) => sendJson(res, 200, payload))
+      .catch((error) => sendJson(res, error.statusCode || 500, { error: error.message, code: error.code || null }));
+    return;
+  }
+
+  if (requestUrl.pathname === '/api/stop-loss/sell') {
+    if (req.method !== 'POST' && req.method !== 'PATCH') {
+      sendJson(res, 405, { error: 'Method not allowed' });
+      return;
+    }
+
+    markStopLossPositionSold(requestUrl.searchParams.get('id'))
+      .then((payload) => sendJson(res, 200, payload))
+      .catch((error) => sendJson(res, error.statusCode || 500, { error: error.message, code: error.code || null }));
     return;
   }
 
