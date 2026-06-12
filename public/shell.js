@@ -115,6 +115,22 @@ const templates = {
         <span class="sell">净流出</span>
         <span class="band">主力净占比</span>
       </div>
+      <div class="trade-section sector-flow-day-section">
+        <div class="section-header trade-header">
+          <div>
+            <h2>单日板块资金流向</h2>
+            <div class="meta" id="sector-flow-day-status">从数据库读取所选交易日的板块资金快照。</div>
+          </div>
+          <div class="sector-flow-day-controls">
+            <label>
+              <span>交易日期</span>
+              <input id="sector-flow-day-date" type="date">
+            </label>
+          </div>
+        </div>
+        <div class="chart-frame"><div id="sector-flow-day-chart" class="chart-canvas sector-flow-day-chart" aria-label="单日各板块主力净流入变化图表"></div></div>
+        <div id="sector-flow-day-empty" class="meta" hidden>暂无该交易日的板块资金快照。</div>
+      </div>
       <div class="trade-section sector-flow-history-section">
         <div class="section-header trade-header">
           <div>

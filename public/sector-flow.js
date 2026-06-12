@@ -4,11 +4,14 @@ const numberFormatter = new Intl.NumberFormat('zh-CN', {
 });
 
 let chartInstance = null;
+let dayChartInstance = null;
 let abortController = null;
+let dayAbortController = null;
 let historyAbortController = null;
 let autoRefreshTimer = null;
 let forceRefreshTimer = null;
 let lastAutoRefreshMinuteKey = '';
+let resizeListenerAttached = false;
 
 const AUTO_REFRESH_INTERVAL_MS = 30 * 60 * 1000;
 const AUTO_REFRESH_START_MINUTES = 9 * 60 + 25;
@@ -235,6 +238,14 @@ async function fetchJson(url, options = {}) {
   return payload;
 }
 
+function ensureChartResizeListener() {
+  if (resizeListenerAttached) {
+    return;
+  }
+  window.addEventListener('resize', resizeChart);
+  resizeListenerAttached = true;
+}
+
 function buildOption(items) {
   const ordered = [...items].reverse();
   const names = ordered.map((item) => item.name);
@@ -321,6 +332,148 @@ function buildOption(items) {
   };
 }
 
+function normalizeSnapshotTimeLabel(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value || '--';
+  }
+
+  return date.toLocaleTimeString('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+}
+
+function buildDayFlowOption(payload) {
+  const snapshots = payload.snapshots || [];
+  const times = snapshots.map((snapshot) => normalizeSnapshotTimeLabel(snapshot.capturedAt));
+  const snapshotRecords = snapshots.map((snapshot) => {
+    const itemByCode = new Map();
+    (snapshot.items || []).forEach((item) => {
+      itemByCode.set(item.code, item);
+    });
+    return itemByCode;
+  });
+  const mutedColor = cssVar('--muted') || '#687789';
+  const axisColor = 'rgba(104, 119, 137, 0.26)';
+  const splitColor = 'rgba(104, 119, 137, 0.14)';
+
+  return {
+    animation: true,
+    backgroundColor: 'transparent',
+    grid: {
+      left: 86,
+      right: 34,
+      top: 72,
+      bottom: 74
+    },
+    legend: {
+      type: 'scroll',
+      top: 18,
+      left: 16,
+      right: 16,
+      itemWidth: 12,
+      itemHeight: 8,
+      textStyle: {
+        color: mutedColor
+      }
+    },
+    tooltip: {
+      trigger: 'axis',
+      confine: true,
+      backgroundColor: 'rgba(30, 35, 41, 0.92)',
+      borderWidth: 0,
+      textStyle: {
+        color: '#fdf8f1'
+      },
+      formatter(params) {
+        const safeParams = Array.isArray(params) ? params : [];
+        const index = safeParams[0] ? safeParams[0].dataIndex : 0;
+        const rows = safeParams
+          .map((param) => {
+            const sector = MAINSTREAM_SECTORS.find((item) => item.displayName === param.seriesName);
+            const record = sector ? snapshotRecords[index]?.get(sector.code) : null;
+            return { param, record };
+          })
+          .filter((row) => row.record && Number.isFinite(row.record.mainNetInflow))
+          .sort((left, right) => right.record.mainNetInflow - left.record.mainNetInflow);
+        const topRows = rows.slice(0, 8).map(({ param, record }) => (
+          `${param.marker}${escapeHtml(param.seriesName)}: ${formatMoney(record.mainNetInflow)} / 排名 ${Number.isFinite(record.rank) ? record.rank : '--'} / 占比 ${formatPercent(record.mainNetInflowPct)}`
+        ));
+        return [
+          `<div style="margin-bottom:6px;font-weight:600;">${escapeHtml(payload.date || '--')} ${escapeHtml(times[index] || '--')}</div>`,
+          ...topRows,
+          rows.length > topRows.length ? `<span style="color:#cbd5e1;">其余 ${rows.length - topRows.length} 个板块略</span>` : ''
+        ].filter(Boolean).join('<br>');
+      }
+    },
+    dataZoom: [
+      {
+        type: 'inside',
+        throttle: 50
+      },
+      {
+        type: 'slider',
+        height: 24,
+        bottom: 24,
+        borderColor: 'rgba(104, 119, 137, 0.18)',
+        fillerColor: 'rgba(37, 99, 235, 0.12)',
+        handleStyle: {
+          color: '#2563eb'
+        },
+        textStyle: {
+          color: mutedColor
+        }
+      }
+    ],
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: times,
+      axisLabel: {
+        color: mutedColor,
+        hideOverlap: true
+      },
+      axisLine: { lineStyle: { color: axisColor } },
+      axisTick: { show: false }
+    },
+    yAxis: {
+      type: 'value',
+      axisLabel: {
+        color: mutedColor,
+        formatter(value) {
+          return formatMoney(value);
+        }
+      },
+      axisLine: { lineStyle: { color: axisColor } },
+      splitLine: {
+        lineStyle: { color: splitColor, type: 'dashed' }
+      }
+    },
+    series: MAINSTREAM_SECTORS.map((sector) => ({
+      name: sector.displayName,
+      type: 'line',
+      smooth: true,
+      symbol: 'circle',
+      symbolSize: 5,
+      connectNulls: true,
+      emphasis: {
+        focus: 'series'
+      },
+      lineStyle: {
+        width: 2
+      },
+      data: snapshotRecords.map((itemByCode) => {
+        const value = itemByCode.get(sector.code)?.mainNetInflow;
+        return Number.isFinite(value) ? value : null;
+      })
+    }))
+  };
+}
+
 function renderChart(items) {
   const chartDom = getEl('sector-flow-chart');
   if (!chartDom || !window.echarts) {
@@ -329,15 +482,32 @@ function renderChart(items) {
 
   if (!chartInstance) {
     chartInstance = echarts.init(chartDom, null, { renderer: 'canvas' });
-    window.addEventListener('resize', resizeChart);
+    ensureChartResizeListener();
   }
 
   chartInstance.setOption(buildOption(items), true);
 }
 
+function renderDayChart(payload) {
+  const chartDom = getEl('sector-flow-day-chart');
+  if (!chartDom || !window.echarts) {
+    return;
+  }
+
+  if (!dayChartInstance) {
+    dayChartInstance = echarts.init(chartDom, null, { renderer: 'canvas' });
+    ensureChartResizeListener();
+  }
+
+  dayChartInstance.setOption(buildDayFlowOption(payload), true);
+}
+
 function resizeChart() {
   if (chartInstance) {
     chartInstance.resize();
+  }
+  if (dayChartInstance) {
+    dayChartInstance.resize();
   }
 }
 
@@ -402,6 +572,17 @@ function setLoading(isLoading) {
   if (button) {
     button.disabled = isLoading;
     button.textContent = isLoading ? '刷新中' : '刷新';
+  }
+}
+
+function setDayStatus(text) {
+  setText('sector-flow-day-status', text);
+}
+
+function setDayLoading(isLoading) {
+  const input = getEl('sector-flow-day-date');
+  if (input) {
+    input.disabled = isLoading;
   }
 }
 
@@ -505,6 +686,55 @@ function renderDailyHistoryTable(payloads) {
     `;
     tableBody.appendChild(tr);
   });
+}
+
+async function loadSectorDayFlow(date = formatShanghaiDate()) {
+  const empty = getEl('sector-flow-day-empty');
+  if (dayAbortController) {
+    dayAbortController.abort();
+  }
+  const controller = new AbortController();
+  dayAbortController = controller;
+  setDayLoading(true);
+  setDayStatus(`${date} 板块资金快照加载中...`);
+  if (empty) {
+    empty.hidden = true;
+  }
+
+  try {
+    const payload = await fetchJson(`/api/sector-fund-flow/history?date=${encodeURIComponent(date)}`, {
+      signal: controller.signal
+    });
+    const snapshots = payload.snapshots || [];
+    if (!snapshots.length) {
+      if (dayChartInstance) {
+        dayChartInstance.clear();
+      }
+      if (empty) {
+        empty.hidden = false;
+      }
+      setDayStatus(`${date} 暂无数据库快照。`);
+      return;
+    }
+
+    renderDayChart(payload);
+    setDayStatus(`${date} 已展示 ${snapshots.length} 条数据库快照、${payload.sectorCount || MAINSTREAM_SECTORS.length} 个板块。`);
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      return;
+    }
+    const message = error.code === 'SUPABASE_NOT_CONFIGURED'
+      ? '单日资金流向加载失败：数据库连接未配置，请配置 SUPABASE_URL 和 SUPABASE_SERVICE_ROLE_KEY。'
+      : `单日资金流向加载失败：${error.message}`;
+    setDayStatus(message);
+    if (dayChartInstance) {
+      dayChartInstance.clear();
+    }
+  } finally {
+    if (dayAbortController === controller) {
+      setDayLoading(false);
+    }
+  }
 }
 
 async function loadSectorDailyHistory() {
@@ -739,6 +969,10 @@ function destroy() {
     abortController.abort();
     abortController = null;
   }
+  if (dayAbortController) {
+    dayAbortController.abort();
+    dayAbortController = null;
+  }
   if (historyAbortController) {
     historyAbortController.abort();
     historyAbortController = null;
@@ -752,25 +986,42 @@ function destroy() {
     forceRefreshTimer = null;
   }
   lastAutoRefreshMinuteKey = '';
-  window.removeEventListener('resize', resizeChart);
+  if (resizeListenerAttached) {
+    window.removeEventListener('resize', resizeChart);
+    resizeListenerAttached = false;
+  }
   if (chartInstance) {
     chartInstance.dispose();
     chartInstance = null;
+  }
+  if (dayChartInstance) {
+    dayChartInstance.dispose();
+    dayChartInstance = null;
   }
 }
 
 async function init() {
   destroy();
+  const dayDateInput = getEl('sector-flow-day-date');
+  const defaultDayDate = formatShanghaiDate();
+  if (dayDateInput) {
+    dayDateInput.value = defaultDayDate;
+    dayDateInput.addEventListener('change', () => {
+      loadSectorDayFlow(dayDateInput.value || defaultDayDate);
+    });
+  }
   const refreshButton = getEl('sector-flow-refresh');
   if (refreshButton) {
     refreshButton.addEventListener('click', async () => {
       await loadSectorFlow();
+      await loadSectorDayFlow(dayDateInput ? dayDateInput.value || defaultDayDate : defaultDayDate);
       await loadSectorDailyHistory();
     });
   }
 
+  await loadSectorFlow();
   await Promise.all([
-    loadSectorFlow(),
+    loadSectorDayFlow(defaultDayDate),
     loadSectorDailyHistory()
   ]);
   startAutoRefresh();

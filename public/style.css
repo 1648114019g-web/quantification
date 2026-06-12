@@ -800,6 +800,48 @@ input:focus-visible {
   min-height: 440px;
 }
 
+.sector-flow-day-section {
+  border-top-color: rgba(13, 148, 136, 0.2);
+}
+
+.sector-flow-day-controls {
+  display: flex;
+  justify-content: flex-end;
+  align-items: end;
+}
+
+.sector-flow-day-controls label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.sector-flow-day-controls input {
+  min-height: 42px;
+  min-width: 170px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.sector-flow-day-controls input:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.sector-flow-day-chart {
+  height: 540px;
+  min-height: 480px;
+}
+
+#sector-flow-day-empty {
+  margin-top: 12px;
+}
+
 .sector-flow-history-section {
   border-top-color: rgba(37, 99, 235, 0.18);
 }
@@ -1857,6 +1899,12 @@ input:focus-visible {
   .sector-flow-actions {
     width: 100%;
     justify-content: flex-start;
+  }
+
+  .sector-flow-day-controls,
+  .sector-flow-day-controls label,
+  .sector-flow-day-controls input {
+    width: 100%;
   }
 
   .chart-canvas {
