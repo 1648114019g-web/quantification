@@ -4,10 +4,8 @@ const numberFormatter = new Intl.NumberFormat('zh-CN', {
 });
 
 let chartInstance = null;
-let historyChartInstance = null;
 let abortController = null;
 let historyAbortController = null;
-let activeSectorCode = 'BK1283';
 let autoRefreshTimer = null;
 let forceRefreshTimer = null;
 let lastAutoRefreshMinuteKey = '';
@@ -323,130 +321,6 @@ function buildOption(items) {
   };
 }
 
-function buildHistoryOption(payload) {
-  const records = payload.records || [];
-  const dates = records.map((record) => record.tradingDate);
-  const mutedColor = cssVar('--muted') || '#687789';
-  const axisColor = 'rgba(104, 119, 137, 0.26)';
-  const splitColor = 'rgba(104, 119, 137, 0.14)';
-  const sector = MAINSTREAM_SECTORS.find((item) => item.code === payload.code);
-  const sectorName = payload.name || (sector && sector.displayName) || payload.code || '板块';
-
-  return {
-    animation: true,
-    backgroundColor: 'transparent',
-    color: ['#2563eb', '#0d9488'],
-    grid: {
-      left: 78,
-      right: 34,
-      top: 58,
-      bottom: 72
-    },
-    legend: {
-      show: true,
-      top: 18,
-      left: 16,
-      right: 16,
-      itemWidth: 10,
-      itemHeight: 10,
-      textStyle: {
-        color: mutedColor
-      }
-    },
-    tooltip: {
-      trigger: 'axis',
-      backgroundColor: 'rgba(30, 35, 41, 0.92)',
-      borderWidth: 0,
-      textStyle: {
-        color: '#fdf8f1'
-      },
-      formatter(params) {
-        const index = params && params[0] ? params[0].dataIndex : 0;
-        const record = records[index] || {};
-        return [
-          `<div style="margin-bottom:6px;font-weight:600;">${escapeHtml(sectorName)} ${escapeHtml(record.tradingDate || '--')}</div>`,
-          `最晚快照: ${escapeHtml(record.capturedAt ? formatDateTimeLabel(record.capturedAt) : '--')}`,
-          `当日排名: ${Number.isFinite(record.rank) ? record.rank : '--'}`,
-          `涨跌幅: ${formatPercent(record.changePct)}`,
-          `主力净流入: ${formatMoney(record.mainNetInflow)}`,
-          `主力净占比: ${formatPercent(record.mainNetInflowPct)}`
-        ].join('<br>');
-      },
-      axisPointer: {
-        type: 'line'
-      }
-    },
-    dataZoom: [
-      {
-        type: 'inside',
-        throttle: 50
-      },
-      {
-        type: 'slider',
-        height: 24,
-        bottom: 24,
-        borderColor: 'rgba(104, 119, 137, 0.18)',
-        fillerColor: 'rgba(37, 99, 235, 0.12)',
-        handleStyle: {
-          color: '#2563eb'
-        },
-        textStyle: {
-          color: mutedColor
-        }
-      }
-    ],
-    xAxis: {
-      type: 'category',
-      boundaryGap: false,
-      data: dates,
-      axisLabel: {
-        color: mutedColor,
-        hideOverlap: true
-      },
-      axisLine: { lineStyle: { color: axisColor } },
-      axisTick: { show: false }
-    },
-    yAxis: {
-      type: 'value',
-      axisLabel: {
-        color: mutedColor,
-        formatter(value) {
-          return formatMoney(value);
-        }
-      },
-      axisLine: { lineStyle: { color: axisColor } },
-      splitLine: {
-        lineStyle: { color: splitColor, type: 'dashed' }
-      }
-    },
-    series: [
-      {
-        name: `${sectorName} 主力净流入`,
-        type: 'line',
-        smooth: true,
-        symbol: 'circle',
-        symbolSize: 6,
-        connectNulls: true,
-        emphasis: {
-          focus: 'series'
-        },
-        lineStyle: {
-          width: 2
-        },
-        areaStyle: {
-          opacity: 0.08
-        },
-        itemStyle: {
-          color(params) {
-            return flowColor(params.value);
-          }
-        },
-        data: records.map((record) => (Number.isFinite(record.mainNetInflow) ? record.mainNetInflow : null))
-      }
-    ]
-  };
-}
-
 function renderChart(items) {
   const chartDom = getEl('sector-flow-chart');
   if (!chartDom || !window.echarts) {
@@ -461,26 +335,9 @@ function renderChart(items) {
   chartInstance.setOption(buildOption(items), true);
 }
 
-function renderHistoryChart(payload) {
-  const chartDom = getEl('sector-flow-history-chart');
-  if (!chartDom || !window.echarts) {
-    return;
-  }
-
-  if (!historyChartInstance) {
-    historyChartInstance = echarts.init(chartDom, null, { renderer: 'canvas' });
-    window.addEventListener('resize', resizeChart);
-  }
-
-  historyChartInstance.setOption(buildHistoryOption(payload), true);
-}
-
 function resizeChart() {
   if (chartInstance) {
     chartInstance.resize();
-  }
-  if (historyChartInstance) {
-    historyChartInstance.resize();
   }
 }
 
@@ -548,102 +405,138 @@ function setLoading(isLoading) {
   }
 }
 
-function setHistoryLoading(isLoading) {
-  const tabs = document.querySelectorAll('.sector-flow-sector-tab');
-  tabs.forEach((tab) => {
-    tab.disabled = isLoading && tab.dataset.code !== activeSectorCode;
-  });
-}
-
 function setHistoryStatus(text) {
   setText('sector-flow-history-status', text);
 }
 
-function getActiveSector() {
-  return MAINSTREAM_SECTORS.find((sector) => sector.code === activeSectorCode) || MAINSTREAM_SECTORS[0];
+function buildHistoryCellTitle(sector, record) {
+  return [
+    `${sector.displayName} ${record.tradingDate || '--'}`,
+    `最晚快照: ${record.capturedAt ? formatDateTimeLabel(record.capturedAt) : '--'}`,
+    `当日排名: ${Number.isFinite(record.rank) ? record.rank : '--'}`,
+    `涨跌幅: ${formatPercent(record.changePct)}`,
+    `主力净流入: ${formatMoney(record.mainNetInflow)}`,
+    `主力净占比: ${formatPercent(record.mainNetInflowPct)}`
+  ].join('\n');
 }
 
-function renderSectorTabs() {
-  const tabsRoot = getEl('sector-flow-sector-tabs');
-  if (!tabsRoot) {
-    return;
-  }
-
-  tabsRoot.innerHTML = '';
-  MAINSTREAM_SECTORS.forEach((sector) => {
-    const button = document.createElement('button');
-    const isActive = sector.code === activeSectorCode;
-    button.type = 'button';
-    button.className = `sector-flow-sector-tab${isActive ? ' is-active' : ''}`;
-    button.dataset.code = sector.code;
-    button.setAttribute('role', 'tab');
-    button.setAttribute('aria-selected', isActive ? 'true' : 'false');
-    button.textContent = sector.displayName;
-    button.addEventListener('click', () => {
-      if (activeSectorCode === sector.code) {
-        return;
-      }
-      activeSectorCode = sector.code;
-      renderSectorTabs();
-      loadSectorDailyHistory(sector.code);
-    });
-    tabsRoot.appendChild(button);
-  });
+function buildRecentInflowTitle(sector, dates, value) {
+  return [
+    `${sector.displayName} 近5日总流入`,
+    `统计日期: ${dates.length ? dates.join(' / ') : '--'}`,
+    `合计: ${formatMoney(value)}`
+  ].join('\n');
 }
 
-function renderDailyHistoryTable(records) {
+function renderDailyHistoryTable(payloads) {
+  const tableHead = getEl('sector-flow-history-head');
   const tableBody = getEl('sector-flow-history-list');
   const empty = getEl('sector-flow-history-empty');
-  if (!tableBody || !empty) {
+  if (!tableHead || !tableBody || !empty) {
     return;
   }
 
-  tableBody.innerHTML = '';
-  empty.hidden = records.length > 0;
+  const payloadByCode = new Map(payloads.map((payload) => [payload.code, payload]));
+  const dateSet = new Set();
+  payloads.forEach((payload) => {
+    (payload.records || []).forEach((record) => {
+      if (record.tradingDate) {
+        dateSet.add(record.tradingDate);
+      }
+    });
+  });
 
-  records.slice().reverse().forEach((record) => {
+  const dates = Array.from(dateSet).sort().reverse();
+  const recentDates = dates.slice(0, 5);
+  tableHead.innerHTML = `
+    <tr>
+      <th>标的</th>
+      <th>近5日总流入</th>
+      ${dates.map((date) => `<th>${escapeHtml(date)}</th>`).join('')}
+    </tr>
+  `;
+  tableBody.innerHTML = '';
+  empty.hidden = dates.length > 0;
+
+  const rows = MAINSTREAM_SECTORS.map((sector, index) => {
+    const records = (payloadByCode.get(sector.code)?.records || []);
+    const recordByDate = new Map(records.map((record) => [record.tradingDate, record]));
+    const recentNetInflow = recentDates.reduce((sum, date) => {
+      const value = recordByDate.get(date)?.mainNetInflow;
+      return sum + (Number.isFinite(value) ? value : 0);
+    }, 0);
+    return {
+      sector,
+      index,
+      recordByDate,
+      recentNetInflow
+    };
+  }).sort((left, right) => {
+    if (right.recentNetInflow !== left.recentNetInflow) {
+      return right.recentNetInflow - left.recentNetInflow;
+    }
+    return left.index - right.index;
+  });
+
+  rows.forEach(({ sector, recordByDate, recentNetInflow }) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${escapeHtml(record.tradingDate || '--')}</td>
-      <td>${escapeHtml(record.capturedAt ? formatDateTimeLabel(record.capturedAt) : '--')}</td>
-      <td><span class="sector-rank">${Number.isFinite(record.rank) ? record.rank : '--'}</span></td>
-      <td class="${trendClass(record.changePct)}">${formatPercent(record.changePct)}</td>
-      <td class="${trendClass(record.mainNetInflow)}">${formatMoney(record.mainNetInflow)}</td>
-      <td class="${trendClass(record.mainNetInflowPct)}">${formatPercent(record.mainNetInflowPct)}</td>
+      <td>
+        <strong>${escapeHtml(sector.displayName)}</strong>
+        <div class="meta">${escapeHtml(sector.code)}</div>
+      </td>
+      <td class="sector-flow-recent-total ${trendClass(recentNetInflow)}" title="${escapeHtml(buildRecentInflowTitle(sector, recentDates, recentNetInflow))}">
+        <strong>${formatMoney(recentNetInflow)}</strong>
+        <span>${recentDates.length}日合计</span>
+      </td>
+      ${dates.map((date) => {
+        const record = recordByDate.get(date);
+        if (!record) {
+          return '<td class="muted-cell">--</td>';
+        }
+
+        return `
+          <td class="${trendClass(record.mainNetInflow)}" title="${escapeHtml(buildHistoryCellTitle(sector, record))}">
+            <strong>${formatMoney(record.mainNetInflow)}</strong>
+            <span>${formatPercent(record.mainNetInflowPct)}</span>
+          </td>
+        `;
+      }).join('')}
     `;
     tableBody.appendChild(tr);
   });
 }
 
-async function loadSectorDailyHistory(code = activeSectorCode) {
+async function loadSectorDailyHistory() {
   const errorBox = getEl('error');
   if (historyAbortController) {
     historyAbortController.abort();
   }
   historyAbortController = new AbortController();
-  activeSectorCode = code;
-  const sector = getActiveSector();
-  setHistoryLoading(true);
-  setHistoryStatus(`${sector.displayName} 历史资金流向加载中...`);
+  setHistoryStatus('板块历史资金流向加载中...');
 
   try {
-    const payload = await fetchJson(`/api/sector-fund-flow/daily-history?code=${encodeURIComponent(code)}`, {
-      signal: historyAbortController.signal
-    });
-    const records = payload.records || [];
+    const payloads = await Promise.all(MAINSTREAM_SECTORS.map((sector) => (
+      fetchJson(`/api/sector-fund-flow/daily-history?code=${encodeURIComponent(sector.code)}`, {
+        signal: historyAbortController.signal
+      }).then((payload) => ({
+        ...payload,
+        code: payload.code || sector.code,
+        name: payload.name || sector.displayName
+      }))
+    )));
+    const totalDays = new Set(payloads.flatMap((payload) => (
+      (payload.records || []).map((record) => record.tradingDate).filter(Boolean)
+    ))).size;
+    const sectorCount = payloads.filter((payload) => (payload.records || []).length > 0).length;
 
-    if (!records.length) {
-      if (historyChartInstance) {
-        historyChartInstance.clear();
-      }
-      renderDailyHistoryTable([]);
-      setHistoryStatus(`${sector.displayName} 暂无历史资金数据。`);
+    renderDailyHistoryTable(payloads);
+    if (!totalDays) {
+      setHistoryStatus('暂无板块历史资金数据。');
       return;
     }
 
-    renderHistoryChart(payload);
-    renderDailyHistoryTable(records);
-    setHistoryStatus(`${sector.displayName} 已展示 ${payload.totalDays} 个交易日；每天取当天最晚一条快照。`);
+    setHistoryStatus(`已展示 ${sectorCount}/${MAINSTREAM_SECTORS.length} 个板块、${totalDays} 个历史交易日；每天取当天最晚一条快照。`);
   } catch (error) {
     if (error.name === 'AbortError') {
       return;
@@ -656,8 +549,6 @@ async function loadSectorDailyHistory(code = activeSectorCode) {
       errorBox.hidden = false;
       errorBox.textContent = `加载失败：${error.message}`;
     }
-  } finally {
-    setHistoryLoading(false);
   }
 }
 
@@ -866,27 +757,21 @@ function destroy() {
     chartInstance.dispose();
     chartInstance = null;
   }
-  if (historyChartInstance) {
-    historyChartInstance.dispose();
-    historyChartInstance = null;
-  }
 }
 
 async function init() {
   destroy();
-  activeSectorCode = MAINSTREAM_SECTORS[0].code;
-  renderSectorTabs();
   const refreshButton = getEl('sector-flow-refresh');
   if (refreshButton) {
     refreshButton.addEventListener('click', async () => {
       await loadSectorFlow();
-      await loadSectorDailyHistory(activeSectorCode);
+      await loadSectorDailyHistory();
     });
   }
 
   await Promise.all([
     loadSectorFlow(),
-    loadSectorDailyHistory(activeSectorCode)
+    loadSectorDailyHistory()
   ]);
   startAutoRefresh();
   return destroy;

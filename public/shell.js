@@ -119,20 +119,16 @@ const templates = {
         <div class="section-header trade-header">
           <div>
             <h2>板块历史资金流向</h2>
-            <div class="meta" id="sector-flow-history-status">选择板块后展示每天最后一次保存的资金快照。</div>
+            <div class="meta" id="sector-flow-history-status">展示 20 个主流板块每天最后一次保存的主力资金快照。</div>
           </div>
         </div>
-        <div id="sector-flow-sector-tabs" class="sector-flow-sector-tabs" role="tablist" aria-label="20 个主流板块历史切换"></div>
-        <div class="chart-frame"><div id="sector-flow-history-chart" class="chart-canvas sector-flow-history-chart" aria-label="单个板块每日主力净流入历史图表"></div></div>
         <div class="trade-table-wrap sector-flow-history-table-wrap">
-          <table class="trade-table sector-flow-history-table">
-            <thead>
-              <tr><th>日期</th><th>最晚快照</th><th>当日排名</th><th>涨跌幅</th><th>主力净流入</th><th>主力净占比</th></tr>
-            </thead>
+          <table class="trade-table sector-flow-history-table" aria-label="板块历史主力净流入矩阵">
+            <thead id="sector-flow-history-head"><tr><th>标的</th></tr></thead>
             <tbody id="sector-flow-history-list"></tbody>
           </table>
         </div>
-        <div id="sector-flow-history-empty" class="meta" hidden>暂无该板块历史资金数据。</div>
+        <div id="sector-flow-history-empty" class="meta" hidden>暂无板块历史资金数据。</div>
       </div>
       <div class="trade-section sector-flow-table-section">
         <div class="section-header trade-header">
